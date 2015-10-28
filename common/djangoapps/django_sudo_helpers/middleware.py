@@ -1,9 +1,11 @@
 """
 Django sudo middleware.
 """
+
 from xmodule.modulestore.django import modulestore
 from opaque_keys import InvalidKeyError
 from opaque_keys.edx.keys import CourseKey
+from .utils import track_sudo_event
 
 
 class DjangoSudoMiddleware(object):
@@ -15,6 +17,15 @@ class DjangoSudoMiddleware(object):
         """ Process the middleware request. """
         if 'region' in request.GET:
             load_course_or_library(request)
+
+    def process_response(self, request, response):
+        """Process the middleware response."""
+        if request.path.startswith('/sudo/') and request.method == 'POST':
+            track_sudo_event(
+                request, request.user, request.GET.get('region'), request.GET.get('next')
+            )
+
+        return response
 
 
 def load_course_or_library(request):
