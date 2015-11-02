@@ -1,3 +1,16 @@
+if (window) {
+    // MathJax Fast Preview was introduced in 2.5. However, it
+    // causes undesirable flashing/font size changes when
+    // MathJax is used for interactive preview (equation editor).
+    // Setting processSectionDelay to 0 (see below) fully eliminates
+    // fast preview, but to reduce confusion, we are also setting
+    // the option as displayed in the context menu to false.
+    // When upgrading to 2.6, check if this variable name changed.
+    window.MathJax = {
+      menuSettings: {CHTMLpreview: false}
+    };
+}
+
 require.config({
     // NOTE: baseUrl has been previously set in cms/static/templates/base.html
     waitSeconds: 60,
@@ -191,6 +204,12 @@ require.config({
                   ]
                 }
               });
+              // In order to eliminate all flashing during interactive
+              // preview, it is necessary to set processSectionDelay to 0
+              // (remove delay between input and output phases). This
+              // effectively disables fast preview, regardless of
+              // the fast preview setting as shown in the context menu.
+              MathJax.Hub.processSectionDelay = 0;
               MathJax.Hub.Configured();
             }
         },
