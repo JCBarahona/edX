@@ -25,6 +25,7 @@ from xmodule_django.models import CourseKeyField
 from django.utils.translation import ugettext_lazy
 
 
+CREDIT_PROVIDER_ID_REGEX = r"[a-z,A-Z,0-9,\-]+"
 log = logging.getLogger(__name__)
 
 
@@ -42,7 +43,7 @@ class CreditProvider(TimeStampedModel):
         unique=True,
         validators=[
             RegexValidator(
-                regex=r"^[a-z,A-Z,0-9,\-]+$",
+                regex=CREDIT_PROVIDER_ID_REGEX,
                 message="Only alphanumeric characters and hyphens (-) are allowed",
                 code="invalid_provider_id",
             )

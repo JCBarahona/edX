@@ -4,12 +4,12 @@ API for initiating and tracking requests for credit from a provider.
 
 import datetime
 import logging
-import pytz
 import uuid
 
+import pytz
 from django.db import transaction
-from lms.djangoapps.django_comment_client.utils import JsonResponse
 
+from lms.djangoapps.django_comment_client.utils import JsonResponse
 from openedx.core.djangoapps.credit.exceptions import (
     UserIsNotEligible,
     CreditProviderNotConfigured,
@@ -26,7 +26,6 @@ from openedx.core.djangoapps.credit.models import (
 from openedx.core.djangoapps.credit.signature import signature, get_shared_secret_key
 from student.models import User
 from util.date_utils import to_timestamp
-
 
 log = logging.getLogger(__name__)
 

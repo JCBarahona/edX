@@ -18,68 +18,57 @@ from django.views.decorators.http import require_POST, require_GET
 from opaque_keys import InvalidKeyError
 from opaque_keys.edx.keys import CourseKey
 import pytz
-from rest_framework import viewsets, mixins, permissions
+from rest_framework import viewsets, mixins, permissions, views, generics
 from rest_framework.authentication import SessionAuthentication
+from rest_framework.exceptions import ValidationError
+from rest_framework.response import Response
 from rest_framework_oauth.authentication import OAuth2Authentication
 
 from openedx.core.djangoapps.credit import api
 from openedx.core.djangoapps.credit.exceptions import CreditApiBadRequest, CreditRequestNotFound
-from openedx.core.djangoapps.credit.models import CreditCourse
-from openedx.core.djangoapps.credit.serializers import CreditCourseSerializer
+from openedx.core.djangoapps.credit.models import (CreditCourse, CreditProvider, CREDIT_PROVIDER_ID_REGEX,
+                                                   CreditEligibility)
+from openedx.core.djangoapps.credit.serializers import (CreditCourseSerializer, CreditProviderSerializer,
+                                                        CreditEligibilitySerializer)
 from openedx.core.djangoapps.credit.signature import signature, get_shared_secret_key
 from openedx.core.lib.api.mixins import PutAsCreateMixin
+from openedx.core.lib.api.permissions import IsStaffOrOwner
 from util.date_utils import from_timestamp
 from util.json_request import JsonResponse
 
 log = logging.getLogger(__name__)
 
 
-@require_GET
-def get_providers_detail(request):
-    """
+class CreditProviderViewSet(viewsets.ReadOnlyModelViewSet):
+    lookup_field = 'provider_id'
+    lookup_value_regex = CREDIT_PROVIDER_ID_REGEX
+    authentication_classes = (OAuth2Authentication, SessionAuthentication,)
+    permission_classes = (permissions.IsAuthenticated,)
+    queryset = CreditProvider.objects.all()
+    serializer_class = CreditProviderSerializer
 
-    **User Cases**
+    def filter_queryset(self, queryset):
+        qs = super(CreditProviderViewSet, self).filter_queryset(queryset)
 
-        Returns details of the credit providers filtered by provided query parameters.
+        # Filter by provider ID
+        provider_ids = self.request.GET.get('provider_ids', None)
 
-    **Parameters:**
+        if provider_ids:
+            provider_ids = provider_ids.split(',')
+            qs = qs.filter(provider_id__in=provider_ids)
 
-        * provider_id (list of provider ids separated with ","): The identifiers for the providers for which
-        user requested
+        return qs
 
-    **Example Usage:**
 
-        GET /api/credit/v1/providers?provider_id=asu,hogwarts
-        "response": [
-            "id": "hogwarts",
-            "display_name": "Hogwarts School of Witchcraft and Wizardry",
-            "url": "https://credit.example.com/",
-            "status_url": "https://credit.example.com/status/",
-            "description": "A new model for the Witchcraft and Wizardry School System.",
-            "enable_integration": false,
-            "fulfillment_instructions": "
-            <p>In order to fulfill credit, Hogwarts School of Witchcraft and Wizardry requires learners to:</p>
-            <ul>
-            <li>Sample instruction abc</li>
-            <li>Sample instruction xyz</li>
-            </ul>",
-        },
-        ...
-        ]
+class CreditProviderCallbackView(views.APIView):
+    @method_decorator(csrf_exempt)
+    def dispatch(self, request, *args, **kwargs):
+        return super(CreditProviderCallbackView, self).dispatch(request, *args, **kwargs)
 
-    **Responses:**
-
-        * 200 OK: The request was created successfully. Returned content
-            is a JSON-encoded dictionary describing what the client should
-            send to the credit provider.
-
-        * 404 Not Found: The provider does not exist.
-
-    """
-    provider_ids = request.GET.get("provider_ids", None)
-    providers_list = provider_ids.split(",") if provider_ids else None
-    providers = api.get_credit_providers(providers_list)
-    return JsonResponse(providers)
+    def post(self, request, provider_id):
+        provider = generics.get_object_or_404(CreditProvider, provider_id=provider_id)
+        # TODO Copy body from credit_provider_callback
+        return Response()
 
 
 @require_POST
@@ -251,6 +240,30 @@ def credit_provider_callback(request, provider_id):
         return HttpResponseBadRequest(ex)
     else:
         return HttpResponse()
+
+
+class CreditEligibilityView(generics.ListAPIView):
+    authentication_classes = (OAuth2Authentication, SessionAuthentication,)
+    pagination_class = None
+    permission_classes = (permissions.IsAuthenticated, IsStaffOrOwner)
+    serializer_class = CreditEligibilitySerializer
+    queryset = CreditEligibility.objects.all()
+
+    def filter_queryset(self, queryset):
+        username = self.request.GET.get('username')
+        course_key = self.request.GET.get('course_key')
+
+        if not (username and course_key):
+            raise ValidationError(
+                {'detail': 'Both the course_key and username querystring parameters must be supplied.'})
+
+        course_key = unicode(course_key)
+
+        try:
+            course_key = CourseKey.from_string(course_key)
+        except InvalidKeyError:
+            raise ValidationError({'detail': '[{}] is not a valid course key.'.format(course_key)})
+        return queryset.filter(username=username, course__course_key=course_key)
 
 
 @require_GET
