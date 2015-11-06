@@ -533,6 +533,7 @@ class ThreadViewSetCreateTest(DiscussionAPIViewTestMixin, ModuleStoreTestCase):
         self.assertEqual(response_data, expected_response_data)
 
 
+@ddt.ddt
 @httpretty.activate
 @disable_signal(api, 'thread_edited')
 @mock.patch.dict("django.conf.settings.FEATURES", {"ENABLE_DISCUSSION_SERVICE": True})
@@ -542,8 +543,10 @@ class ThreadViewSetPartialUpdateTest(DiscussionAPIViewTestMixin, ModuleStoreTest
         super(ThreadViewSetPartialUpdateTest, self).setUp()
         self.url = reverse("thread-detail", kwargs={"thread_id": "test_thread"})
 
-    def test_basic(self):
-        self.register_get_user_response(self.user)
+    def register_thread(self, closed=False):
+        """
+        Create cs_thread with minimal fields and register response
+        """
         cs_thread = make_minimal_cs_thread({
             "id": "test_thread",
             "course_id": unicode(self.course.id),
@@ -555,11 +558,22 @@ class ThreadViewSetPartialUpdateTest(DiscussionAPIViewTestMixin, ModuleStoreTest
             "thread_type": "discussion",
             "title": "Original Title",
             "body": "Original body",
+            "closed": closed,
         })
         self.register_get_thread_response(cs_thread)
         self.register_put_thread_response(cs_thread)
-        request_data = {"raw_body": "Edited body"}
-        expected_response_data = {
+
+    def expected_response_data(
+            self,
+            body="Original body",
+            abuse_flagged=False,
+            closed=False,
+            editable_fields=None
+    ):
+        """
+        create expected response data from comment update endpoint
+        """
+        return {
             "id": "test_thread",
             "course_id": unicode(self.course.id),
             "topic_id": "original_topic",
@@ -571,12 +585,12 @@ class ThreadViewSetPartialUpdateTest(DiscussionAPIViewTestMixin, ModuleStoreTest
             "updated_at": "2015-05-29T00:00:00Z",
             "type": "discussion",
             "title": "Original Title",
-            "raw_body": "Edited body",
-            "rendered_body": "<p>Edited body</p>",
+            "raw_body": body,
+            "rendered_body": "<p>%s</p>" % body,
             "pinned": False,
-            "closed": False,
+            "closed": closed,
             "following": False,
-            "abuse_flagged": False,
+            "abuse_flagged": abuse_flagged,
             "voted": False,
             "vote_count": 0,
             "comment_count": 0,
@@ -584,11 +598,17 @@ class ThreadViewSetPartialUpdateTest(DiscussionAPIViewTestMixin, ModuleStoreTest
             "comment_list_url": "http://testserver/api/discussion/v1/comments/?thread_id=test_thread",
             "endorsed_comment_list_url": None,
             "non_endorsed_comment_list_url": None,
-            "editable_fields": ["abuse_flagged", "following", "raw_body", "title", "topic_id", "type", "voted"],
+            "editable_fields": editable_fields,
             "read": False,
             "has_endorsed": False,
             "response_count": 0,
         }
+
+    def test_basic(self):
+        self.register_get_user_response(self.user)
+        self.register_thread()
+        request_data = {"raw_body": "Edited body"}
+
         response = self.client.patch(  # pylint: disable=no-member
             self.url,
             json.dumps(request_data),
@@ -596,7 +616,13 @@ class ThreadViewSetPartialUpdateTest(DiscussionAPIViewTestMixin, ModuleStoreTest
         )
         self.assertEqual(response.status_code, 200)
         response_data = json.loads(response.content)
-        self.assertEqual(response_data, expected_response_data)
+        self.assertEqual(
+            response_data,
+            self.expected_response_data(
+                body="Edited body",
+                editable_fields=["abuse_flagged", "following", "raw_body", "title", "topic_id", "type", "voted"]
+            )
+        )
         self.assertEqual(
             httpretty.last_request().parsed_body,
             {
@@ -633,6 +659,46 @@ class ThreadViewSetPartialUpdateTest(DiscussionAPIViewTestMixin, ModuleStoreTest
         self.assertEqual(response.status_code, 400)
         response_data = json.loads(response.content)
         self.assertEqual(response_data, expected_response_data)
+
+    @ddt.data(
+        ("abuse_flagged", True),
+        ("abuse_flagged", False),
+    )
+    @ddt.unpack
+    def test_closed_thread(self, field, value):
+        self.register_get_user_response(self.user)
+        self.register_thread(closed=True)
+        self.register_flag_response("thread", "test_thread")
+        request_data = {field: value}
+        response = self.client.patch(  # pylint: disable=no-member
+            self.url,
+            json.dumps(request_data),
+            content_type="application/json"
+        )
+        self.assertEqual(response.status_code, 200)
+        response_data = json.loads(response.content)
+        self.assertEqual(
+            response_data,
+            self.expected_response_data(abuse_flagged=value, closed=True, editable_fields=["abuse_flagged"])
+        )
+
+    @ddt.data(
+        ("raw_body", "Edited body"),
+        ("voted", True),
+        ("following", True),
+    )
+    @ddt.unpack
+    def test_closed_thread_error(self, field, value):
+        self.register_get_user_response(self.user)
+        self.register_thread(closed=True)
+        self.register_flag_response("thread", "test_thread")
+        request_data = {field: value}
+        response = self.client.patch(  # pylint: disable=no-member
+            self.url,
+            json.dumps(request_data),
+            content_type="application/json"
+        )
+        self.assertEqual(response.status_code, 400)
 
 
 @httpretty.activate
@@ -851,15 +917,23 @@ class CommentViewSetCreateTest(DiscussionAPIViewTestMixin, ModuleStoreTestCase):
         super(CommentViewSetCreateTest, self).setUp()
         self.url = reverse("comment-list")
 
-    def test_basic(self):
-        self.register_get_user_response(self.user)
+    def register_thread(self, closed=False):
+        """
+        Create cs_thread with minimal fields and register response
+        """
         self.register_get_thread_response(
             make_minimal_cs_thread({
                 "id": "test_thread",
                 "course_id": unicode(self.course.id),
                 "commentable_id": "test_topic",
+                "closed": closed,
             })
         )
+
+    def register_comment(self):
+        """
+        Create cs_comment with minimal fields and register response
+        """
         self.register_post_comment_response(
             {
                 "id": "test_comment",
@@ -869,6 +943,11 @@ class CommentViewSetCreateTest(DiscussionAPIViewTestMixin, ModuleStoreTestCase):
             },
             thread_id="test_thread"
         )
+
+    def test_basic(self):
+        self.register_get_user_response(self.user)
+        self.register_thread()
+        self.register_comment()
         request_data = {
             "thread_id": "test_thread",
             "raw_body": "Test body",
@@ -927,7 +1006,23 @@ class CommentViewSetCreateTest(DiscussionAPIViewTestMixin, ModuleStoreTestCase):
         response_data = json.loads(response.content)
         self.assertEqual(response_data, expected_response_data)
 
+    def test_closed_thread(self):
+        self.register_get_user_response(self.user)
+        self.register_thread(closed=True)
+        self.register_comment()
+        request_data = {
+            "thread_id": "test_thread",
+            "raw_body": "Test body"
+        }
+        response = self.client.post(
+            self.url,
+            json.dumps(request_data),
+            content_type="application/json"
+        )
+        self.assertEqual(response.status_code, 403)
 
+
+@ddt.ddt
 @disable_signal(api, 'comment_edited')
 @mock.patch.dict("django.conf.settings.FEATURES", {"ENABLE_DISCUSSION_SERVICE": True})
 class CommentViewSetPartialUpdateTest(DiscussionAPIViewTestMixin, ModuleStoreTestCase):
@@ -939,15 +1034,26 @@ class CommentViewSetPartialUpdateTest(DiscussionAPIViewTestMixin, ModuleStoreTes
         self.addCleanup(httpretty.disable)
         self.register_get_user_response(self.user)
         self.url = reverse("comment-detail", kwargs={"comment_id": "test_comment"})
+
+    def register_thread(self, closed=False):
+        """
+        Create cs_thread with minimal fields and register response
+        """
         cs_thread = make_minimal_cs_thread({
             "id": "test_thread",
             "course_id": unicode(self.course.id),
+            "closed": closed,
         })
         self.register_get_thread_response(cs_thread)
+
+    def register_comment(self):
+        """
+        Create cs_comment with minimal fields and register response
+        """
         cs_comment = make_minimal_cs_comment({
             "id": "test_comment",
-            "course_id": cs_thread["course_id"],
-            "thread_id": cs_thread["id"],
+            "course_id": unicode(self.course.id),
+            "thread_id": "test_thread",
             "username": self.user.username,
             "user_id": str(self.user.id),
             "created_at": "2015-06-03T00:00:00Z",
@@ -957,9 +1063,16 @@ class CommentViewSetPartialUpdateTest(DiscussionAPIViewTestMixin, ModuleStoreTes
         self.register_get_comment_response(cs_comment)
         self.register_put_comment_response(cs_comment)
 
-    def test_basic(self):
-        request_data = {"raw_body": "Edited body"}
-        expected_response_data = {
+    def expected_response_data(
+            self,
+            body="Original body",
+            abuse_flagged=False,
+            editable_fields=None
+    ):
+        """
+        create expected response data from comment update endpoint
+        """
+        return {
             "id": "test_comment",
             "thread_id": "test_thread",
             "parent_id": None,
@@ -967,18 +1080,23 @@ class CommentViewSetPartialUpdateTest(DiscussionAPIViewTestMixin, ModuleStoreTes
             "author_label": None,
             "created_at": "2015-06-03T00:00:00Z",
             "updated_at": "2015-06-03T00:00:00Z",
-            "raw_body": "Edited body",
-            "rendered_body": "<p>Edited body</p>",
+            "raw_body": body,
+            "rendered_body": "<p>%s</p>" % body,
             "endorsed": False,
             "endorsed_by": None,
             "endorsed_by_label": None,
             "endorsed_at": None,
-            "abuse_flagged": False,
+            "abuse_flagged": abuse_flagged,
             "voted": False,
             "vote_count": 0,
             "children": [],
-            "editable_fields": ["abuse_flagged", "raw_body", "voted"],
+            "editable_fields": editable_fields,
         }
+
+    def test_basic(self):
+        self.register_thread()
+        self.register_comment()
+        request_data = {"raw_body": "Edited body"}
         response = self.client.patch(  # pylint: disable=no-member
             self.url,
             json.dumps(request_data),
@@ -986,7 +1104,10 @@ class CommentViewSetPartialUpdateTest(DiscussionAPIViewTestMixin, ModuleStoreTes
         )
         self.assertEqual(response.status_code, 200)
         response_data = json.loads(response.content)
-        self.assertEqual(response_data, expected_response_data)
+        self.assertEqual(
+            response_data,
+            self.expected_response_data(body="Edited body", editable_fields=["abuse_flagged", "raw_body", "voted"])
+        )
         self.assertEqual(
             httpretty.last_request().parsed_body,
             {
@@ -1000,6 +1121,8 @@ class CommentViewSetPartialUpdateTest(DiscussionAPIViewTestMixin, ModuleStoreTes
         )
 
     def test_error(self):
+        self.register_thread()
+        self.register_comment()
         request_data = {"raw_body": ""}
         response = self.client.patch(  # pylint: disable=no-member
             self.url,
@@ -1012,6 +1135,45 @@ class CommentViewSetPartialUpdateTest(DiscussionAPIViewTestMixin, ModuleStoreTes
         self.assertEqual(response.status_code, 400)
         response_data = json.loads(response.content)
         self.assertEqual(response_data, expected_response_data)
+
+    @ddt.data(
+        ("abuse_flagged", True),
+        ("abuse_flagged", False),
+    )
+    @ddt.unpack
+    def test_closed_thread(self, field, value):
+        self.register_thread(closed=True)
+        self.register_comment()
+        self.register_flag_response("comment", "test_comment")
+        request_data = {field: value}
+        response = self.client.patch(  # pylint: disable=no-member
+            self.url,
+            json.dumps(request_data),
+            content_type="application/json"
+        )
+        self.assertEqual(response.status_code, 200)
+        response_data = json.loads(response.content)
+        self.assertEqual(
+            response_data,
+            self.expected_response_data(abuse_flagged=value, editable_fields=["abuse_flagged"])
+        )
+
+    @ddt.data(
+        ("raw_body", "Edited body"),
+        ("voted", True),
+        ("following", True),
+    )
+    @ddt.unpack
+    def test_closed_thread_error(self, field, value):
+        self.register_thread(closed=True)
+        self.register_comment()
+        request_data = {field: value}
+        response = self.client.patch(  # pylint: disable=no-member
+            self.url,
+            json.dumps(request_data),
+            content_type="application/json"
+        )
+        self.assertEqual(response.status_code, 400)
 
 
 @httpretty.activate

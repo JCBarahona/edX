@@ -56,31 +56,36 @@ def get_editable_fields(cc_content, context):
     """
     Return the set of fields that the requester can edit on the given content
     """
-    # Shared fields
-    ret = {"abuse_flagged", "voted"}
-    if _is_author_or_privileged(cc_content, context):
-        ret |= {"raw_body"}
-
-    # Thread fields
-    if cc_content["type"] == "thread":
-        ret |= {"following"}
+    ret = {"abuse_flagged"}
+    if (cc_content["type"] == "thread" and cc_content["closed"]) or \
+            (cc_content["type"] == "comment" and context["thread"]["closed"]):
+        return ret
+    else:
+        # Shared fields
+        ret |= {"voted"}
         if _is_author_or_privileged(cc_content, context):
-            ret |= {"topic_id", "type", "title"}
-        if context["is_requester_privileged"] and context["course"].is_cohorted:
-            ret |= {"group_id"}
+            ret |= {"raw_body"}
 
-    # Comment fields
-    if (
-            cc_content["type"] == "comment" and (
-                context["is_requester_privileged"] or (
-                    _is_author(context["thread"], context) and
-                    context["thread"]["thread_type"] == "question"
+        # Thread fields
+        if cc_content["type"] == "thread":
+            ret |= {"following"}
+            if _is_author_or_privileged(cc_content, context):
+                ret |= {"topic_id", "type", "title"}
+            if context["is_requester_privileged"] and context["course"].is_cohorted:
+                ret |= {"group_id"}
+
+        # Comment fields
+        if (
+                cc_content["type"] == "comment" and (
+                    context["is_requester_privileged"] or (
+                        _is_author(context["thread"], context) and
+                        context["thread"]["thread_type"] == "question"
+                    )
                 )
-            )
-    ):
-        ret |= {"endorsed"}
+        ):
+            ret |= {"endorsed"}
 
-    return ret
+        return ret
 
 
 def can_delete(cc_content, context):
