@@ -94,6 +94,9 @@ from util.milestones_helpers import (
     is_entrance_exams_enabled
 )
 
+from openedx.core.djangoapps.programs.models import ProgramsApiConfig
+
+
 log = logging.getLogger(__name__)
 
 __all__ = ['course_info_handler', 'course_handler', 'course_listing',
@@ -471,7 +474,9 @@ def course_listing(request):
         'course_creator_status': _get_course_creator_status(request.user),
         'rerun_creator_status': GlobalStaff().has_user(request.user),
         'allow_unicode_course_id': settings.FEATURES.get('ALLOW_UNICODE_COURSE_ID', False),
-        'allow_course_reruns': settings.FEATURES.get('ALLOW_COURSE_RERUNS', True)
+        'allow_course_reruns': settings.FEATURES.get('ALLOW_COURSE_RERUNS', True),
+        'is_programs_enabled': ProgramsApiConfig.current().is_studio_tab_enabled,
+        'programs_authoring_app_url': ProgramsApiConfig.current().authoring_app_url,
     })
 
 

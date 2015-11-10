@@ -27,9 +27,15 @@
           % elif course_creator_status=='disallowed_for_this_site' and settings.FEATURES.get('STUDIO_REQUEST_EMAIL',''):
           <a href="mailto:${settings.FEATURES.get('STUDIO_REQUEST_EMAIL','')}">${_("Email staff to create course")}</a>
           % endif
+
           % if show_new_library_button:
             <a href="#" class="button new-button new-library-button"><i class="icon fa fa-plus icon-inline"></i>
             ${_("New Library")}</a>
+          % endif
+
+          % if is_programs_enabled:
+            <a href="#" class="button new-button new-program-button"><i class="icon fa fa-plus icon-inline"></i>
+            ${_("New Program")}</a>
           % endif
         </li>
       </ul>
@@ -165,6 +171,12 @@
       </div>
       % endif
 
+      % if is_programs_enabled:
+        <div class="wrapper-create-element wrapper-create-program">
+          <div class="programs-create"></div>
+        </div>
+      % endif
+
       <!-- STATE: processing courses -->
       %if allow_course_reruns and rerun_creator_status and len(in_process_course_actions) > 0:
       <div class="courses courses-processing">
@@ -271,10 +283,17 @@
       </div>
       %endif
 
-      %if libraries_enabled:
+      %if libraries_enabled or is_programs_enabled:
       <ul id="course-index-tabs">
         <li class="courses-tab active"><a>${_("Courses")}</a></li>
-        <li class="libraries-tab"><a>${_("Libraries")}</a></li>
+
+        % if libraries_enabled:
+          <li class="libraries-tab"><a>${_("Libraries")}</a></li>
+        % endif
+
+        % if is_programs_enabled:
+          <li class="programs-tab"><a>${_("Programs")}</a></li>
+        % endif
       </ul>
       %endif
 
@@ -484,6 +503,12 @@
         % endif
       </div>
       %endif
+
+      % if is_programs_enabled:
+        <div class="programs programs-tab">
+          <div class="programs-list"></div>
+          <script type="text/javascript" src=${programs_authoring_app_url}></script>
+        </div>
 
     </article>
     <aside class="content-supplementary" role="complementary">
