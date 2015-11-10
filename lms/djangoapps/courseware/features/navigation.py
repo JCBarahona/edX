@@ -131,7 +131,7 @@ def then_i_see_the_content_of_the_sequence_item(step):
 def and_i_return_to_the_courseware(step):
     world.visit('/')
     world.click_link("View Course")
-    world.click_link("Courseware")
+    world.click_link("Course")
 
 
 @step(u'I see that I was most recently in the subsection')
