@@ -592,7 +592,7 @@ class ThreadViewSetPartialUpdateTest(DiscussionAPIViewTestMixin, ModuleStoreTest
         response = self.client.patch(  # pylint: disable=no-member
             self.url,
             json.dumps(request_data),
-            content_type="application/json"
+            content_type="application/merge-patch+json"
         )
         self.assertEqual(response.status_code, 200)
         response_data = json.loads(response.content)
@@ -625,7 +625,7 @@ class ThreadViewSetPartialUpdateTest(DiscussionAPIViewTestMixin, ModuleStoreTest
         response = self.client.patch(  # pylint: disable=no-member
             self.url,
             json.dumps(request_data),
-            content_type="application/json"
+            content_type="application/merge-patch+json"
         )
         expected_response_data = {
             "field_errors": {"title": {"developer_message": "This field may not be blank."}}
@@ -633,6 +633,16 @@ class ThreadViewSetPartialUpdateTest(DiscussionAPIViewTestMixin, ModuleStoreTest
         self.assertEqual(response.status_code, 400)
         response_data = json.loads(response.content)
         self.assertEqual(response_data, expected_response_data)
+
+    def test_unsupported_media_type(self):
+        self.register_get_user_response(self.user)
+        request_data = {"raw_body": "Edited body"}
+        response = self.client.patch(  # pylint: disable=no-member
+            self.url,
+            json.dumps(request_data),
+            content_type="application/json"
+        )
+        self.assertEqual(response.status_code, 415)
 
 
 @httpretty.activate
@@ -982,7 +992,7 @@ class CommentViewSetPartialUpdateTest(DiscussionAPIViewTestMixin, ModuleStoreTes
         response = self.client.patch(  # pylint: disable=no-member
             self.url,
             json.dumps(request_data),
-            content_type="application/json"
+            content_type="application/merge-patch+json"
         )
         self.assertEqual(response.status_code, 200)
         response_data = json.loads(response.content)
@@ -1004,7 +1014,7 @@ class CommentViewSetPartialUpdateTest(DiscussionAPIViewTestMixin, ModuleStoreTes
         response = self.client.patch(  # pylint: disable=no-member
             self.url,
             json.dumps(request_data),
-            content_type="application/json"
+            content_type="application/merge-patch+json"
         )
         expected_response_data = {
             "field_errors": {"raw_body": {"developer_message": "This field may not be blank."}}
@@ -1012,6 +1022,16 @@ class CommentViewSetPartialUpdateTest(DiscussionAPIViewTestMixin, ModuleStoreTes
         self.assertEqual(response.status_code, 400)
         response_data = json.loads(response.content)
         self.assertEqual(response_data, expected_response_data)
+
+    def test_unsupported_media_type(self):
+        self.register_get_user_response(self.user)
+        request_data = {"raw_body": "Edited body"}
+        response = self.client.patch(  # pylint: disable=no-member
+            self.url,
+            json.dumps(request_data),
+            content_type="application/json"
+        )
+        self.assertEqual(response.status_code, 415)
 
 
 @httpretty.activate
