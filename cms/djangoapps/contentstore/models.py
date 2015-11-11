@@ -2,6 +2,7 @@
 Models for contentstore
 """
 # pylint: disable=no-member
+
 from django.db import models
 from django.db.models.fields import TextField
 
