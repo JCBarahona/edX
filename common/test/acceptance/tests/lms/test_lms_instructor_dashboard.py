@@ -209,6 +209,10 @@ class ProctoredExamsTest(BaseInstructorDashboardTest):
 
         # open the exam settings to make it a proctored exam.
         self.course_outline.open_exam_settings_dialog()
+
+        # select addtional settings tab
+        self.course_outline.select_additional_settings_tab()
+
         self.course_outline.make_exam_proctored()
 
         # login as a verified student and visit the courseware.
@@ -231,6 +235,10 @@ class ProctoredExamsTest(BaseInstructorDashboardTest):
 
         # open the exam settings to make it a proctored exam.
         self.course_outline.open_exam_settings_dialog()
+
+        # select addtional settings tab
+        self.course_outline.select_additional_settings_tab()
+
         self.course_outline.make_exam_timed()
 
         # login as a verified student and visit the courseware.
