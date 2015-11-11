@@ -90,6 +90,43 @@ def handle_500(template_path, context=None):
     return decorator
 
 
+def conditional_decorator(decorator, test_func):
+    """
+    A decorator used to apply another decorator to a view based on a test function.
+
+    test_func is passed request as argument and if test_func evaluates to True then the decorator passed in as first
+    argument will be applied to the view otherwise view will be executed normally.
+
+    Usage::
+
+        @conditional_decorator(
+            handle_500(template_path='certificates/server-error.html', context={'error-info': 'Internal Server Error'}),
+            lambda request: request.GET.get('preview', None)
+            )
+        def my_view(request):
+            # Any unhandled exception in this view would be handled by the handle_500 decorator only if the GET data
+            # has 'preview' entry in it.
+            # ...
+
+    """
+    def outer_func(func):
+        """
+        Decorator to apply another decorator to a view on conditional basis
+        """
+        @wraps(func)
+        def inner_func(request, *args, **kwargs):
+            """
+            Execute test function and if it passes than apply decorator passed in as first argument
+            otherwise call view function without any decorator
+            """
+            if test_func(request):
+                return decorator(func)(request, *args, **kwargs)
+            else:
+                return func(request, *args, **kwargs)
+        return inner_func
+    return outer_func
+
+
 def calculate(request):
     ''' Calculator in footer of every page. '''
     equation = request.GET['equation']
