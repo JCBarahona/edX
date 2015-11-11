@@ -11,6 +11,7 @@ The methods in these classes are organized into several conceptual buckets:
 import os
 
 from bok_choy.promise import EmptyPromise
+from bok_choy.page_object import unguarded
 from .course_page import CoursePage
 from common.test.acceptance.tests.helpers import disable_animations
 
@@ -78,7 +79,7 @@ class CertificatesPage(CoursePage):
         Return list of the certificates for the course.
         """
         css = self.certficate_css + ' .wrapper-collection'
-        return [Certificate(self, self.certficate_css, index) for index in xrange(len(self.q(css=css)))]
+        return [CertificateSectionPage(self, self.certficate_css, index) for index in xrange(len(self.q(css=css)))]
 
     @property
     def no_certificates_message_shown(self):
@@ -171,37 +172,75 @@ class CertificatesPage(CoursePage):
         self.wait_for_ajax()
 
 
-class Certificate(object):
+class CertificateSectionPage(CertificatesPage):
     """
-    Certificate page object wrapper
+    CertificateSectionPage is the certificate section within Certificates page, There might be multiple certificates
+    in a Certificates Page so this section object can be used to used to identify unique certificate and apply
+    operations on it.
     """
 
-    def __init__(self, page, prefix, index):
-        self.page = page
+    def __init__(self, container_certificates_page, prefix, index):
+        """
+        Initialize CertificateSection Page
+
+        :param container_certificates_page: Container Page Object of the certificate section
+        :param prefix: css selector of the container element
+        :param index: index of section in the certificate list on the page
+
+        :return:
+        """
         self.selector = prefix + ' .certificates-list-item-{}'.format(index)
         self.index = index
+        self.container = container_certificates_page
+
+        super(CertificateSectionPage, self).__init__(
+            container_certificates_page.browser,
+            **container_certificates_page.course_info
+        )
+
+    def is_browser_on_page(self):
+        """
+        Verify that the browser is on the page and it is not still loading.
+        """
+        EmptyPromise(
+            lambda: self.container.q(css=".certificates").present,
+            'Wait for Certificate Section to load.'
+        ).fulfill()
+        return True
+
+    @property
+    def url(self):
+        """
+        Construct a URL to the page section within the certificate page.
+        """
+        # The url is same as CertificatePage url for now.
+        return self.container.url
 
     ################
     # Helpers
     ################
 
+    @unguarded
     def get_selector(self, css=''):
         """
         Return selector fo certificate container
         """
         return ' '.join([self.selector, css])
 
-    def find_css(self, css_selector):
+    @unguarded
+    def q(self, **kwargs):
         """
-        Find elements as defined by css locator.
+        Override q method to search elements contained within the Certificate Section only.
         """
-        return self.page.q(css=self.get_selector(css=css_selector))
+        if 'css' in kwargs:
+            kwargs.update({'css': self.get_selector(kwargs['css'])})
+        return super(CertificateSectionPage, self).q(**kwargs)
 
     def get_text(self, css):
         """
         Return text for the defined by css locator.
         """
-        return self.find_css(css).first.text[0]
+        return self.q(css=css).first.text[0]
 
     ################
     # Properties
@@ -219,9 +258,9 @@ class Certificate(object):
         """
         Return certificate mode.
         """
-        if self.find_css('.collection-edit').present:
+        if self.q(css='.collection-edit').present:
             return 'edit'
-        elif self.find_css('.collection').present:
+        elif self.q(css='.collection').present:
             return 'details'
 
     @property
@@ -244,7 +283,7 @@ class Certificate(object):
         """
         Set certificate name.
         """
-        self.find_css('.collection-name-input').first.fill(value)
+        self.q(css='.collection-name-input').first.fill(value)
 
     @property
     def description(self):
@@ -258,7 +297,7 @@ class Certificate(object):
         """
         Set certificate description.
         """
-        self.find_css('.certificate-description-input').first.fill(value)
+        self.q(css='.certificate-description-input').first.fill(value)
 
     @property
     def course_title(self):
@@ -272,15 +311,15 @@ class Certificate(object):
         """
         Set certificate course title override field.
         """
-        self.find_css('.certificate-course-title-input').first.fill(value)
+        self.q(css='.certificate-course-title-input').first.fill(value)
 
     @property
     def signatories(self):
         """
         Return list of the signatories for the certificate.
         """
-        css = self.selector + ' .signatory-' + self.mode
-        return [Signatory(self, self.selector, self.mode, index) for index in xrange(len(self.page.q(css=css)))]
+        css = ' .signatory-' + self.mode
+        return [SignatorySectionPage(self, self.selector, self.mode, index) for index in xrange(len(self.q(css=css)))]
 
     ################
     # Wait Actions
@@ -291,7 +330,7 @@ class Certificate(object):
         Returns whether or not the certificate delete icon is present.
         """
         EmptyPromise(
-            lambda: self.find_css('.actions .delete.action-icon').present,
+            lambda: self.q(css='.actions .delete.action-icon').present,
             'Certificate delete button is displayed'
         ).fulfill()
 
@@ -300,7 +339,7 @@ class Certificate(object):
         Certificate details are expanded.
         """
         EmptyPromise(
-            lambda: self.find_css('a.detail-toggle.hide-details').present,
+            lambda: self.q(css='a.detail-toggle.hide-details').present,
             'Certificate details are expanded'
         ).fulfill()
 
@@ -312,58 +351,107 @@ class Certificate(object):
         """
         Create a new certificate.
         """
-        disable_animations(self.page)
-        self.find_css('.action-primary').first.click()
-        self.page.wait_for_ajax()
+        disable_animations(self)
+        self.q(css='.action-primary').first.click()
+        self.wait_for_ajax()
 
     def click_save_certificate_button(self):
         """
         Save certificate.
         """
-        self.find_css('.action-primary').first.click()
-        self.page.wait_for_ajax()
+        self.q(css='.action-primary').first.click()
+        self.wait_for_ajax()
 
     def click_add_signatory_button(self):
         """
         Add signatory to certificate
         """
-        self.find_css('.action-add-signatory').first.click()
+        self.q(css='.action-add-signatory').first.click()
 
     def click_edit_certificate_button(self):
         """
         Open editing view for the certificate.
         """
-        self.find_css('.action-edit .edit').first.click()
+        self.q(css='.action-edit .edit').first.click()
 
     def click_cancel_edit_certificate(self):
         """
         Cancel certificate editing.
         """
-        self.find_css('.action-secondary').first.click()
+        self.q(css='.action-secondary').first.click()
 
     def click_certificate_details_toggle(self):
         """
         Expand/collapse certificate configuration.
         """
-        self.find_css('a.detail-toggle').first.click()
+        self.q(css='a.detail-toggle').first.click()
 
     def click_delete_certificate_button(self):
         """
         Remove the first (possibly the only) certificate from the set
         """
         self.wait_for_certificate_delete_button()
-        self.find_css('.actions .delete.action-icon').first.click()
+        self.q(css='.actions .delete.action-icon').first.click()
 
 
-class Signatory(object):
+class SignatorySectionPage(CertificatesPage):
     """
-    Signatory page object wrapper
+    SignatorySectionPage is the signatory section within CertificatesSection, There might be multiple signatories
+    in a certificate section so this section object can be used to used to identify unique section and apply
+    operations on it.
     """
     def __init__(self, certificate, prefix, mode, index):
+        """
+        Initialize SignatorySection Page
+
+        :param certificate: Container Section Page Object of the Signatory section
+        :param prefix: css selector of the container element
+        :param index: index of section in the signatory list on the page
+        :param mode: 'details' or 'edit', showing whether signatory is being displayed or edited
+
+        :return:
+        """
         self.certificate = certificate
         self.prefix = prefix
         self.index = index
         self.mode = mode
+
+        super(SignatorySectionPage, self).__init__(self.certificate.browser, **self.certificate.course_info)
+
+    def is_browser_on_page(self):
+        """
+        Verify that the browser is on the page and it is not still loading.
+        """
+        EmptyPromise(
+            lambda: self.certificate.q(css=".signatory-details-list, .signatory-edit-list").present,
+            'Wait for Signatory Section to load.'
+        ).fulfill()
+        return True
+
+    @property
+    def url(self):
+        """
+        Construct a URL to the page section within the certificate section page.
+        """
+        # The url is same as CertificateSectionPage url for now.
+        return self.certificate.url
+
+    @unguarded
+    def get_selector(self, css=''):
+        """
+        Return selector fo signatory container
+        """
+        selector = ' .signatory-{}-view-{}'.format(self.mode, self.index)
+        return ' '.join([selector, css])
+
+    @unguarded
+    def q(self, **kwargs):
+        """
+        Override q method to search elements contained within the Signatory Section only.
+        """
+        if 'css' in kwargs:
+            kwargs.update({'css': self.get_selector(kwargs['css'])})
+        return super(SignatorySectionPage, self).q(**kwargs)
 
     ################
     # Helpers
@@ -381,19 +469,6 @@ class Signatory(object):
         # Should grab common point between this page module and the data folder.
         return os.sep.join(__file__.split(os.sep)[:-4]) + '/data/uploads/' + filename
 
-    def get_selector(self, css=''):
-        """
-        Return selector fo signatory container
-        """
-        selector = self.prefix + ' .signatory-{}-view-{}'.format(self.mode, self.index)
-        return ' '.join([selector, css])
-
-    def find_css(self, css_selector):
-        """
-        Find elements as defined by css locator.
-        """
-        return self.certificate.page.q(css=self.get_selector(css=css_selector))
-
     ################
     # Properties
     ################
@@ -403,42 +478,42 @@ class Signatory(object):
         """
         Return signatory name.
         """
-        return self.find_css('.signatory-panel-body .signatory-name-value').first.text[0]
+        return self.q(css='.signatory-panel-body .signatory-name-value').first.text[0]
 
     @name.setter
     def name(self, value):
         """
         Set signatory name.
         """
-        self.find_css('.signatory-name-input').first.fill(value)
+        self.q(css='.signatory-name-input').first.fill(value)
 
     @property
     def title(self):
         """
         Return signatory title.
         """
-        return self.find_css('.signatory-panel-body .signatory-title-value').first.text[0]
+        return self.q(css='.signatory-panel-body .signatory-title-value').first.text[0]
 
     @title.setter
     def title(self, value):
         """
         Set signatory title.
         """
-        self.find_css('.signatory-title-input').first.fill(value)
+        self.q(css='.signatory-title-input').first.fill(value)
 
     @property
     def organization(self):
         """
         Return signatory organization.
         """
-        return self.find_css('.signatory-panel-body .signatory-organization-value').first.text[0]
+        return self.q(css='.signatory-panel-body .signatory-organization-value').first.text[0]
 
     @organization.setter
     def organization(self, value):
         """
         Set signatory organization.
         """
-        self.find_css('.signatory-organization-input').first.fill(value)
+        self.q(css='.signatory-organization-input').first.fill(value)
 
     ################
     # Workflows
@@ -448,7 +523,7 @@ class Signatory(object):
         """
         Open editing view for the signatory.
         """
-        self.find_css('.edit-signatory').first.click()
+        self.q(css='.edit-signatory').first.click()
         self.mode = 'edit'
         self.wait_for_signatory_edit_view()
 
@@ -461,24 +536,24 @@ class Signatory(object):
         self.click_signatory_delete_icon()
         self.wait_for_signatory_delete_prompt()
 
-        self.certificate.page.q(css='#prompt-warning a.button.action-primary').first.click()
-        self.certificate.page.wait_for_ajax()
+        self.certificate.q(css='#prompt-warning a.button.action-primary').first.click()
+        self.certificate.wait_for_ajax()
 
     def save(self):
         """
         Save signatory.
         """
         # Click on the save button.
-        self.certificate.page.q(css='button.signatory-panel-save').click()
+        self.certificate.q(css='button.signatory-panel-save').click()
         self.mode = 'details'
-        self.certificate.page.wait_for_ajax()
+        self.certificate.wait_for_ajax()
         self.wait_for_signatory_detail_view()
 
     def close(self):
         """
         Cancel signatory editing.
         """
-        self.certificate.page.q(css='button.signatory-panel-close').click()
+        self.certificate.q(css='button.signatory-panel-close').click()
         self.mode = 'details'
         self.wait_for_signatory_detail_view()
 
@@ -487,24 +562,24 @@ class Signatory(object):
         Opens upload image dialog and upload given image file.
         """
         self.wait_for_signature_image_upload_button()
-        self.find_css('.action-upload-signature').first.click()
+        self.q(css='.action-upload-signature').first.click()
         self.wait_for_signature_image_upload_prompt()
 
         asset_file_path = self.file_path(image_filename)
-        self.certificate.page.q(
+        self.certificate.container.q(
             css='.assetupload-modal .upload-dialog input[type="file"]'
         )[0].send_keys(asset_file_path)
 
         EmptyPromise(
-            lambda: not self.certificate.page.q(
+            lambda: not self.certificate.container.q(
                 css='.assetupload-modal a.action-upload.disabled'
             ).present,
             'Upload button is not disabled anymore'
         ).fulfill()
 
-        self.certificate.page.q(css='.assetupload-modal a.action-upload').first.click()
+        self.certificate.container.q(css='.assetupload-modal a.action-upload').first.click()
         EmptyPromise(
-            lambda: not self.certificate.page.q(css='.assetupload-modal .upload-dialog').visible,
+            lambda: not self.certificate.container.q(css='.assetupload-modal .upload-dialog').visible,
             'Upload dialog is removed after uploading image'
         ).fulfill()
 
@@ -518,7 +593,7 @@ class Signatory(object):
         Returns whether or not the delete icon is present.
         """
         EmptyPromise(
-            lambda: self.certificate.page.q(css='.signatory-panel-delete').present,
+            lambda: self.certificate.q(css='.signatory-panel-delete').present,
             'Delete icon is displayed'
         ).fulfill()
 
@@ -527,7 +602,7 @@ class Signatory(object):
         Promise to wait until signatory delete prompt is visible
         """
         EmptyPromise(
-            lambda: self.certificate.page.q(css='a.button.action-primary').present,
+            lambda: self.certificate.q(css='a.button.action-primary').present,
             'Delete prompt is displayed'
         ).fulfill()
 
@@ -536,7 +611,7 @@ class Signatory(object):
         Promise to wait until signatory edit view is loaded
         """
         EmptyPromise(
-            lambda: self.find_css('.signatory-panel-body .signatory-name-input').present,
+            lambda: self.q(css='.signatory-panel-body .signatory-name-input').present,
             'On signatory edit view'
         ).fulfill()
 
@@ -545,7 +620,7 @@ class Signatory(object):
         Promise to wait until signatory details view is loaded
         """
         EmptyPromise(
-            lambda: self.find_css('.signatory-panel-body .signatory-name-value').present,
+            lambda: self.q(css='.signatory-panel-body .signatory-name-value').present,
             'On signatory details view'
         ).fulfill()
 
@@ -554,7 +629,7 @@ class Signatory(object):
         Promise to wait until signatory image upload prompt is visible
         """
         EmptyPromise(
-            lambda: self.certificate.page.q(css='.assetupload-modal .action-upload').present,
+            lambda: self.certificate.container.q(css='.assetupload-modal .action-upload').present,
             'Signature image upload dialog opened'
         ).fulfill()
 
@@ -563,7 +638,7 @@ class Signatory(object):
         Promise to wait until signatory image upload button is visible
         """
         EmptyPromise(
-            lambda: self.certificate.page.q(css=".action-upload-signature").first.present,
+            lambda: self.certificate.q(css=".action-upload-signature").first.present,
             'Signature image upload button available'
         ).fulfill()
 
@@ -573,7 +648,7 @@ class Signatory(object):
         Promise for the signature image to be displayed
         """
         EmptyPromise(
-            lambda: self.certificate.page.q(css=".current-signature-image .signature-image").present,
+            lambda: self.certificate.q(css=".current-signature-image .signature-image").present,
             'Signature image available'
         ).fulfill()
 
@@ -585,4 +660,4 @@ class Signatory(object):
         """
         Clicks the signatory deletion icon/action
         """
-        self.find_css('.signatory-panel-delete').first.click()
+        self.q(css='.signatory-panel-delete').first.click()
